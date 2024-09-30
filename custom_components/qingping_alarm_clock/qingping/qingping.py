@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from bleak import BleakClient
 from datetime import time as dtime
 
@@ -96,6 +97,7 @@ class Qingping:
             _LOGGER.debug(f"Disconnecting from {self.mac}...")
             await self.client.disconnect()
             self.eventbus.send(DEVICE_DISCONNECT, self)
+            self.client = None
             return True
 
         return False
@@ -119,7 +121,12 @@ class Qingping:
         await self._write_config(b"\x01\x02")
 
     async def set_time(self, timestamp: int, timezone_offset: int | None = None):
+        start_time = time.time()
+
         await self._ensure_configuration()
+
+        # Account for time passed while connecting
+        timestamp = int(timestamp + (time.time() - start_time))
 
         timestamp_bytes = self._get_timestamp_bytes(timestamp)
         await self._write_gatt_char(MAIN_CHAR, timestamp_bytes)
@@ -379,4 +386,3 @@ class Qingping:
 
                 self._alarms_event.set()
                 self.eventbus.send(ALARMS_UPDATE, self.alarms)
-
