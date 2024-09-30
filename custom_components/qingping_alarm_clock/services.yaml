@@ -1,0 +1,80 @@
+set_alarm:
+  description: "Set an alarm with specified parameters."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
+    slot:
+      description: "The slot number for the alarm."
+      example: 1
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 19
+          mode: box
+    time:
+      description: "The time for the alarm in HH:MM format."
+      example: "07:30"
+      required: true
+      selector:
+        text:
+    days:
+      description: "Comma-separated list of days (mon, tue, wed, thu, fri, sat, sun)."
+      example: "mon,wed,fri"
+      required: true
+      selector:
+        text:
+    enabled:
+      description: "Whether the alarm is enabled."
+      example: true
+      required: true
+      selector:
+        boolean:
+delete_alarm:
+  description: "Delete an alarm."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
+    slot:
+      description: "The slot number for the alarm."
+      example: 1
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 19
+          mode: box
+set_time:
+  description: "Set the time."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
+    time:
+      description: "The time in YYYY-MM-DD HH:MM:SS format."
+      example: "2022-02-22 13:30:00"
+      required: true
+      selector:
+        datetime:
+    timezone:
+      description: "Timezone in IANA format."
+      example: "Europe/Bucharest"
+      required: true
+      selector:
+        text:
+refresh:
+  description: "Connect to the clock to refresh data."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
