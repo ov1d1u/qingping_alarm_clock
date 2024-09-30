@@ -363,7 +363,7 @@ class Qingping:
         timestamp_bytes[4] = (timestamp >> 16) & 0xFF
         timestamp_bytes[5] = (timestamp >> 24) & 0xFF
 
-        return timestamp_bytes
+        return bytes(timestamp_bytes)
 
     async def _notification_handler(self, sender, data):
         if sender.uuid.lower() == CFG_READ_CHAR.lower():
