@@ -10,6 +10,7 @@ from homeassistant.components.bluetooth import (
 )
 
 from .configuration import Configuration, Language
+from .util import updates_configuration, ensure_alarms
 from .alarm import Alarm, AlarmDay
 from .eventbus import EventBus
 from .exceptions import NotConnectedError, NoConfigurationError
@@ -137,6 +138,7 @@ class Qingping:
             self.configuration.timezone_offset = timezone_offset
             await self.set_configuration(self.configuration)
 
+    @ensure_alarms
     async def set_alarm(
         self,
         slot: int,
@@ -144,8 +146,6 @@ class Qingping:
         time: dtime,
         days: set[AlarmDay]
     ) -> bool:
-        await self._ensure_alarms()
-
         if slot >= 0 and slot < ALARM_SLOTS_COUNT:
             alarm: Alarm = self.alarms[slot]
             alarm.is_enabled = is_enabled
@@ -161,9 +161,8 @@ class Qingping:
 
         return False
 
+    @ensure_alarms
     async def delete_alarm(self, slot: int) -> bool:
-        await self._ensure_alarms()
-
         if slot >= 0 and slot < ALARM_SLOTS_COUNT:
             alarm: Alarm = self.alarms[slot]
             alarm.deactivate()
@@ -175,150 +174,75 @@ class Qingping:
             else:
                 raise NotConnectedError("Not connected")
 
+    @updates_configuration
     async def enable_alarms(self, is_enabled: bool):
-        await self._ensure_configuration()
+        self.configuration.alarms_on = is_enabled
+        await self._write_config(self.configuration.to_bytes())
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.alarms_on = is_enabled
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_sound_volume(self, volume: int):
-        await self._ensure_configuration()
+        self.configuration.sound_volume = volume
+        await self._write_config(self.configuration.to_bytes())
+        await self._write_config(b"\x01\x04")
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.sound_volume = volume
-                await self._write_config(self.configuration.to_bytes())
-                await self._write_config(b"\x01\x04")
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
+    @updates_configuration
+    async def set_screen_light_time(self, _time: int):
+        self.configuration.screen_light_time = _time
+        await self._write_config(self.configuration.to_bytes())
 
-    async def set_screen_light_time(self, time: int):
-        await self._ensure_configuration()
-
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.screen_light_time = time
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_daytime_brightness(self, brightness: int):
-        await self._ensure_configuration()
+        self.configuration.daytime_brightness = brightness
+        await self._write_config(self.configuration.to_bytes())
+        await self._write_config(bytes([0x02, 0x03, brightness//10]))
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.daytime_brightness = brightness
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_nighttime_brightness(self, brightness: int):
-        await self._ensure_configuration()
+        self.configuration.nighttime_brightness = brightness
+        await self._write_config(self.configuration.to_bytes())
+        await self._write_config(bytes([0x02, 0x03, brightness//10]))
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.nighttime_brightness = brightness
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
+    @updates_configuration
+    async def set_nighttime_start_time(self, _time: dtime):
+        self.configuration.night_time_start_time = _time
+        await self._write_config(self.configuration.to_bytes())
 
-    async def set_nighttime_start_time(self, time: dtime):
-        await self._ensure_configuration()
+    @updates_configuration
+    async def set_nighttime_end_time(self, _time: dtime):
+        self.configuration.night_time_end_time = _time
+        await self._write_config(self.configuration.to_bytes())
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.night_time_start_time = time
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
+    @updates_configuration
+    async def set_night_mode(self, is_night_mode: bool):
+        self.configuration.night_mode_enabled = is_night_mode
+        await self._write_config(self.configuration.to_bytes())
 
-    async def set_nighttime_end_time(self, time: dtime):
-        await self._ensure_configuration()
-
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.night_time_end_time = time
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_language(self, language: Language):
-        await self._ensure_configuration()
+        self.configuration.language = language
+        await self._write_config(self.configuration.to_bytes())
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.language = language
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_24h_time_format(self, is_24h: bool):
-        await self._ensure_configuration()
+        self.configuration.use_24h_format = is_24h
+        await self._write_config(self.configuration.to_bytes())
 
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.use_24h_format = is_24h
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
+    @updates_configuration
     async def set_uses_celsius(self, is_celsius: bool):
-        await self._ensure_configuration()
-
-        if self.client and self.client.is_connected:
-            if self.configuration is not None:
-                self.configuration.use_celsius = is_celsius
-                await self._write_config(self.configuration.to_bytes())
-                await self._get_configuration()
-            else:
-                raise NoConfigurationError("Configuration not ready")
-        else:
-            raise NotConnectedError("Not connected")
-
-    async def _ensure_connected(self):
-        if not self.client or not self.client.is_connected:
-            await self.connect()
+        self.configuration.use_celsius = is_celsius
+        await self._write_config(self.configuration.to_bytes())
 
     async def _ensure_configuration(self):
-        await self._ensure_connected()
+        if not self.client or not self.client.is_connected:
+            await self.connect()
 
         if not self.configuration or self.configuration.is_expired:
             await self._get_configuration()
             await self._configuration_event.wait()
 
     async def _ensure_alarms(self):
-        await self._ensure_connected()
+        if not self.client or not self.client.is_connected:
+            await self.connect()
 
         if not self.alarms:
             await self._get_alarms()

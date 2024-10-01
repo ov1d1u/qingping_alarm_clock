@@ -24,6 +24,7 @@ class Configuration:
         self._night_time_end_hour = config_bytes[11]
         self._night_time_end_minute = config_bytes[12]
         self._tz_plus_flag = config_bytes[13] == 1
+        self._night_mode = config_bytes[14] == 1
 
         self._language = Language.ZH if config_bytes[5] & 1 << 0 == 0 else Language.EN
         self._use_24h_format = config_bytes[5] & 1 << 1 == 0
@@ -179,6 +180,24 @@ class Configuration:
     def alarms_on(self, value):
         self._alarms_on = value
 
+    @property
+    def night_mode_enabled(self):
+        return self._night_mode
+
+    @night_mode_enabled.setter
+    def night_mode_enabled(self, value):
+        self._night_mode = value
+        if value:
+            self._night_time_start_hour = 21
+            self._night_time_start_minute = 0
+            self._night_time_end_hour = 6
+            self._night_time_end_minute = 0
+        else:
+            self._night_time_start_hour = 0
+            self._night_time_start_minute = 0
+            self._night_time_end_hour = 0
+            self._night_time_end_minute = 1
+
     def to_bytes(self):
         byte_array = [0x13, 0x01]
         byte_array.append(self.sound_volume)
@@ -203,8 +222,9 @@ class Configuration:
         byte_array.append(self.night_time_end_hour)
         byte_array.append(self.night_time_end_minute)
         byte_array.append(b'\x01' if self._tz_plus_flag else b'\x00')
+        byte_array.append(b'\x01' if self._night_mode else b'\x00')
 
-        byte_array.append(b'\xff' * 6)
+        byte_array.append(b'\xff' * 5)
         bytes_result = b''.join([bytes([x]) if isinstance(x, int) else x for x in byte_array])
 
         if len(bytes_result) != 20:
