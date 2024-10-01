@@ -12,8 +12,7 @@
   "issue_tracker": "https://github.com/ov1d1u/qingping_alarm_clock/issues",
   "iot_class": "local_polling",
   "requirements": [
-    "bleak>=0.17.0",
-    "pytz>=2022.6"
+    "bleak>=0.17.0"
   ],
-  "version": "0.0.2"
+  "version": "0.0.3"
 }

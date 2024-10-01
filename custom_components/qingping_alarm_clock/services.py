@@ -2,7 +2,6 @@ import logging
 import re
 import voluptuous as vol
 from datetime import datetime
-import pytz
 
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.helpers import device_registry as dr
@@ -19,7 +18,6 @@ from .const import (
     SERVICE_SET_TIME,
     SERVICE_REFRESH,
     CONF_TIME,
-    CONF_TIMEZONE,
     ALARM_SLOTS_COUNT,
     CONF_ALARM_ENABLED,
     CONF_ALARM_SLOT,
@@ -46,8 +44,7 @@ DELETE_ALARM_SCHEMA = vol.Schema({
 
 SET_TIME_SCHEMA = vol.Schema({
     vol.Required(ATTR_DEVICE_ID): str,
-    vol.Required(CONF_TIME): cv.datetime,
-    vol.Required(CONF_TIMEZONE): cv.string
+    vol.Required(CONF_TIME): cv.datetime
 })
 
 REFRESH_SCHEMA = vol.Schema({
@@ -97,12 +94,11 @@ def async_register_services(hass: HomeAssistant) -> None:
             if instance.mac != mac:
                 continue
 
-            timezone = await hass.async_add_executor_job(pytz.timezone, call.data["timezone"])
-            timezone_offset = int(timezone.utcoffset(datetime.now()).total_seconds() / 60)
-            naive_dt = call.data["time"]
-            localized_dt = timezone.localize(naive_dt)
-            utc_dt = localized_dt.astimezone(pytz.utc)
-            timestamp = int(utc_dt.timestamp())
+            dt = call.data["time"]
+            timezone_offset = 0
+            if dt.tzinfo is not None:
+                timezone_offset = int(dt.utcoffset().total_seconds() / 60)
+            timestamp = int(dt.timestamp())
             await instance.set_time(timestamp, timezone_offset)
 
     async def async_refresh(call: ServiceCall) -> None:

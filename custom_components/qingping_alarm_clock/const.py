@@ -7,7 +7,6 @@ CONF_ALARM_TIME = "time"
 CONF_ALARM_DAYS = "days"
 CONF_ALARM_ENABLED = "enabled"
 CONF_TIME = "time"
-CONF_TIMEZONE = "timezone"
 
 SERVICE_SET_ALARM = "set_alarm"
 SERVICE_DELETE_ALARM = "delete_alarm"

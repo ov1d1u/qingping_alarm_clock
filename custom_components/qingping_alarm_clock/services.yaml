@@ -64,12 +64,6 @@ set_time:
       required: true
       selector:
         datetime:
-    timezone:
-      description: "Timezone in IANA format."
-      example: "Europe/Bucharest"
-      required: true
-      selector:
-        text:
 refresh:
   description: "Connect to the clock to refresh data."
   fields:
