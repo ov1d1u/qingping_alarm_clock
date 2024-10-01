@@ -17,7 +17,8 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.TIME,
-    Platform.SELECT]
+    Platform.SELECT,
+    Platform.BINARY_SENSOR]
 
 async def async_setup_entry(
     hass: HomeAssistant,

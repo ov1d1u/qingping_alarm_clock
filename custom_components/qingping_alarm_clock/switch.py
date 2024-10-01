@@ -44,7 +44,7 @@ class QingpingAlarmsSwitch(SwitchEntity):
 
     async def config_updated(self, config: Configuration):
         self._attr_is_on = config.alarms_on
-        self.async_write_ha_state()
+        self.schedule_update_ha_state()
 
     async def alarms_updated(self, alarms: list[Alarm]):
         self._attr_extra_state_attributes = {}
@@ -55,7 +55,7 @@ class QingpingAlarmsSwitch(SwitchEntity):
                 alarm_dict["time"] = alarm.time
                 alarm_dict["days"] = alarm.days_string
                 self._attr_extra_state_attributes[f"alarm_{alarm.slot}"] = alarm_dict
-        self.async_write_ha_state()
+        self.schedule_update_ha_state()
 
 
 class QingpingNightModeSwitch(SwitchEntity):
@@ -82,4 +82,4 @@ class QingpingNightModeSwitch(SwitchEntity):
 
     async def config_updated(self, config: Configuration):
         self._attr_is_on = config.night_mode_enabled
-        self.async_write_ha_state()
+        self.schedule_update_ha_state()

@@ -56,7 +56,7 @@ class Qingping:
                 return True
 
             device = async_ble_device_from_address(self.hass, self.mac, connectable=True)
-            self.client = BleakClient(device)
+            self.client = BleakClient(device, disconnected_callback=self._on_disconnect)
 
             _LOGGER.debug(f"Connecting to {self.mac}...")
             try:
@@ -98,8 +98,6 @@ class Qingping:
         if self.client and self.client.is_connected:
             _LOGGER.debug(f"Disconnecting from {self.mac}...")
             await self.client.disconnect()
-            self.eventbus.send(DEVICE_DISCONNECT, self)
-            self.client = None
             return True
 
         return False
@@ -321,3 +319,11 @@ class Qingping:
 
                 self._alarms_event.set()
                 self.eventbus.send(ALARMS_UPDATE, self.alarms)
+
+    def _on_disconnect(self, client: BleakClient):
+        if self._disconnect_task is not None:
+            self._disconnect_task.cancel()
+            self._disconnect_task = None
+
+        self.client = None
+        self.eventbus.send(DEVICE_DISCONNECT, self)
