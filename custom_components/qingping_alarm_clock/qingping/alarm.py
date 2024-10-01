@@ -43,7 +43,7 @@ class Alarm:
 
     @property
     def time(self):
-        if self.hour and self.minute:
+        if self.hour is not None and self.minute is not None:
             return dtime(self.hour, self.minute)
 
     @time.setter

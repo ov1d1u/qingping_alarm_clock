@@ -16,21 +16,21 @@ set_alarm:
           max: 19
           mode: box
     time:
-      description: "The time for the alarm in HH:MM format."
+      description: "The time for the alarm in HH:MM format (seconds ignored)."
       example: "07:30"
-      required: true
+      required: false
       selector:
-        text:
+        time:
     days:
       description: "Comma-separated list of days (mon, tue, wed, thu, fri, sat, sun)."
       example: "mon,wed,fri"
-      required: true
+      required: false
       selector:
         text:
     enabled:
       description: "Whether the alarm is enabled."
       example: true
-      required: true
+      required: false
       selector:
         boolean:
 delete_alarm:

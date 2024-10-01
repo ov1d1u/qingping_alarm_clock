@@ -5,6 +5,7 @@ from bleak import BleakClient
 from datetime import time as dtime
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.components.bluetooth import (
     async_ble_device_from_address
 )
@@ -13,7 +14,7 @@ from .configuration import Configuration, Language
 from .util import updates_configuration, ensure_alarms
 from .alarm import Alarm, AlarmDay
 from .eventbus import EventBus
-from .exceptions import NotConnectedError, NoConfigurationError
+from .exceptions import NotConnectedError
 from ..const import ALARM_SLOTS_COUNT, DISCONNECT_DELAY
 from .events import (
     DEVICE_CONNECT,
@@ -79,11 +80,11 @@ class Qingping:
             # Read configuration
             _LOGGER.debug("Reading configuration...")
             await self.client.start_notify(CFG_READ_CHAR, self._notification_handler)
-            await self._get_configuration()
+            await self.get_configuration()
 
             # Read alarms
             _LOGGER.debug("Reading alarms...")
-            await self._get_alarms()
+            await self.get_alarms()
 
             return True
 
@@ -117,6 +118,13 @@ class Qingping:
         except Exception as e:
             _LOGGER.debug(f"Failed to disconnect. Error: {e}")
 
+    async def get_configuration(self):
+        if self.client and self.client.is_connected:
+            await self._write_config(b"\x01\x02")
+            await self._configuration_event.wait()
+        else:
+            raise NotConnectedError("Not connected")
+
     async def set_configuration(self, configuration: Configuration):
         await self._write_config(configuration.to_bytes())
         await self._write_config(b"\x01\x02")
@@ -138,26 +146,39 @@ class Qingping:
             self.configuration.timezone_offset = timezone_offset
             await self.set_configuration(self.configuration)
 
+    async def get_alarms(self):
+        if self.client and self.client.is_connected:
+            await self._write_config(b"\x01\x06")
+            await self._alarms_event.wait()
+        else:
+            raise NotConnectedError("Not connected")
+
     @ensure_alarms
     async def set_alarm(
         self,
         slot: int,
-        is_enabled: bool,
-        time: dtime,
-        days: set[AlarmDay]
+        is_enabled: bool | None,
+        time: dtime | None,
+        days: set[AlarmDay] | None
     ) -> bool:
         if slot >= 0 and slot < ALARM_SLOTS_COUNT:
             alarm: Alarm = self.alarms[slot]
-            alarm.is_enabled = is_enabled
-            alarm.time = time
-            alarm.days = days
+            if is_enabled is not None:
+                alarm.is_enabled = is_enabled
+            if time is not None:
+                alarm.time = time
+            if days is not None:
+                alarm.days = days
 
-            if self.client and self.client.is_connected:
-                await self._write_config(alarm.to_bytes())
-                await self._get_alarms()
-                return True
-            else:
-                raise NotConnectedError("Not connected")
+            if not alarm.is_configured:
+                raise ServiceValidationError("Alarm not configured.")
+
+            if not self.client or not self.client.is_connected:
+                await self.connect()
+
+            await self._write_config(alarm.to_bytes())
+            await self.get_alarms()
+            return True
 
         return False
 
@@ -169,7 +190,7 @@ class Qingping:
 
             if self.client and self.client.is_connected:
                 await self._write_config(alarm.to_bytes())
-                await self._get_alarms()
+                await self.get_alarms()
                 return True
             else:
                 raise NotConnectedError("Not connected")
@@ -232,21 +253,23 @@ class Qingping:
         self.configuration.use_celsius = is_celsius
         await self._write_config(self.configuration.to_bytes())
 
-    async def _ensure_configuration(self):
+    async def _ensure_connected(self):
         if not self.client or not self.client.is_connected:
             await self.connect()
 
+    async def _ensure_configuration(self):
         if not self.configuration or self.configuration.is_expired:
-            await self._get_configuration()
-            await self._configuration_event.wait()
+            if not self.client or not self.client.is_connected:
+                await self.connect()
+
+            await self.get_configuration()
 
     async def _ensure_alarms(self):
-        if not self.client or not self.client.is_connected:
-            await self.connect()
-
         if not self.alarms:
-            await self._get_alarms()
-            await self._alarms_event.wait()
+            if not self.client or not self.client.is_connected:
+                await self.connect()
+
+            await self.get_alarms()
 
     async def _write_config(self, data: bytes):
         if self.client and self.client.is_connected:
@@ -256,18 +279,6 @@ class Qingping:
             if self._disconnect_task is not None:
                 self._disconnect_task.cancel()
             self._disconnect_task = loop.create_task(self.delayed_disconnect())
-        else:
-            raise NotConnectedError("Not connected")
-
-    async def _get_configuration(self):
-        if self.client and self.client.is_connected:
-            await self._write_config(b"\x01\x02")
-        else:
-            raise NotConnectedError("Not connected")
-
-    async def _get_alarms(self):
-        if self.client and self.client.is_connected:
-            await self._write_config(b"\x01\x06")
         else:
             raise NotConnectedError("Not connected")
 

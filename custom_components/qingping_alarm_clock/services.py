@@ -32,9 +32,9 @@ DAYS_REGEX = re.compile(r"^(mon|tue|wed|thu|fri|sat|sun)(,(mon|tue|wed|thu|fri|s
 SET_ALARM_SCHEMA = vol.Schema({
     vol.Required(ATTR_DEVICE_ID): str,
     vol.Required(CONF_ALARM_SLOT): vol.All(vol.Coerce(int), vol.Range(min=0, max=ALARM_SLOTS_COUNT)),
-    vol.Required(CONF_ALARM_TIME): cv.time,
-    vol.Required(CONF_ALARM_DAYS): vol.All(cv.string, vol.Match(DAYS_REGEX)),
-    vol.Required(CONF_ALARM_ENABLED): cv.boolean,
+    vol.Optional(CONF_ALARM_TIME): cv.time,
+    vol.Optional(CONF_ALARM_DAYS): vol.All(cv.string, vol.Match(DAYS_REGEX)),
+    vol.Optional(CONF_ALARM_ENABLED): cv.boolean,
 })
 
 DELETE_ALARM_SCHEMA = vol.Schema({
@@ -62,13 +62,14 @@ def async_register_services(hass: HomeAssistant) -> None:
             if instance.mac != mac:
                 continue
 
-            slot = int(call.data[CONF_ALARM_SLOT])
-            time = call.data[CONF_ALARM_TIME]
-            days = alarm_days_from_string(call.data[CONF_ALARM_DAYS])
+            slot = call.data.get(CONF_ALARM_SLOT)
+            is_enabled = call.data.get(CONF_ALARM_ENABLED)
+            time = call.data.get(CONF_ALARM_TIME)
+            days = alarm_days_from_string(call.data.get(CONF_ALARM_DAYS))
 
             await instance.set_alarm(
                 slot,
-                call.data[CONF_ALARM_ENABLED],
+                is_enabled,
                 time,
                 days
             )

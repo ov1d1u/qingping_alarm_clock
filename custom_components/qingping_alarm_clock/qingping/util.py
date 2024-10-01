@@ -3,7 +3,10 @@ from functools import wraps
 from .alarm import AlarmDay
 
 
-def alarm_days_from_string(days_string: str):
+def alarm_days_from_string(days_string: str | None) -> set[AlarmDay] | None:
+    if not days_string:
+        return None
+
     abbreviation_map = {
         "mon": AlarmDay.MONDAY,
         "tue": AlarmDay.TUESDAY,
@@ -22,9 +25,10 @@ def alarm_days_from_string(days_string: str):
 def updates_configuration(func):
     @wraps(func)
     async def wrapper(self, *args, **kwargs):
+        await self._ensure_connected()
         await self._ensure_configuration()
         return_value = await func(self, *args, **kwargs)
-        await self._get_configuration()
+        await self.get_configuration()
         return return_value
     return wrapper
 
