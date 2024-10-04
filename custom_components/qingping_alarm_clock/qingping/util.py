@@ -31,11 +31,3 @@ def updates_configuration(func):
         await self.get_configuration()
         return return_value
     return wrapper
-
-
-def ensure_alarms(func):
-    @wraps(func)
-    async def wrapper(self, *args, **kwargs):
-        await self._ensure_alarms()
-        return await func(self, *args, **kwargs)
-    return wrapper

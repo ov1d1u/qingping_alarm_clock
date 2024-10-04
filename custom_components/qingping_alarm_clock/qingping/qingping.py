@@ -11,11 +11,15 @@ from homeassistant.components.bluetooth import (
 )
 
 from .configuration import Configuration, Language
-from .util import updates_configuration, ensure_alarms
+from .util import updates_configuration
 from .alarm import Alarm, AlarmDay
 from .eventbus import EventBus
 from .exceptions import NotConnectedError
-from ..const import ALARM_SLOTS_COUNT, DISCONNECT_DELAY
+from ..const import (
+    ALARM_SLOTS_COUNT,
+    DISCONNECT_DELAY,
+    CONNECTION_TIMEOUT
+)
 from .events import (
     DEVICE_CONNECT,
     DEVICE_DISCONNECT,
@@ -130,6 +134,7 @@ class Qingping:
     async def set_time(self, timestamp: int, timezone_offset: int | None = None):
         start_time = time.time()
 
+        await self._ensure_connected()
         await self._ensure_configuration()
 
         # Account for time passed while connecting
@@ -151,7 +156,6 @@ class Qingping:
         else:
             raise NotConnectedError("Not connected")
 
-    @ensure_alarms
     async def set_alarm(
         self,
         slot: int,
@@ -159,6 +163,9 @@ class Qingping:
         time: dtime | None,
         days: set[AlarmDay] | None
     ) -> bool:
+        await self._ensure_alarms()
+        await self._ensure_connected()
+
         if slot >= 0 and slot < ALARM_SLOTS_COUNT:
             alarm: Alarm = self.alarms[slot]
             if is_enabled is not None:
@@ -171,17 +178,16 @@ class Qingping:
             if not alarm.is_configured:
                 raise ServiceValidationError("Alarm not configured.")
 
-            if not self.client or not self.client.is_connected:
-                await self.connect()
-
             await self._write_config(alarm.to_bytes())
             await self.get_alarms()
             return True
 
         return False
 
-    @ensure_alarms
     async def delete_alarm(self, slot: int) -> bool:
+        await self._ensure_alarms()
+        await self._ensure_connected()
+
         if slot >= 0 and slot < ALARM_SLOTS_COUNT:
             alarm: Alarm = self.alarms[slot]
             alarm.deactivate()
@@ -252,21 +258,23 @@ class Qingping:
         await self._write_config(self.configuration.to_bytes())
 
     async def _ensure_connected(self):
-        if not self.client or not self.client.is_connected:
-            await self.connect()
+        async def wait_for_connected():
+            while not self.client or not self.client.is_connected:
+                await self.connect()
+
+        try:
+            await asyncio.wait_for(wait_for_connected(), CONNECTION_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise NotConnectedError("Connection timeout")
 
     async def _ensure_configuration(self):
         if not self.configuration or self.configuration.is_expired:
-            if not self.client or not self.client.is_connected:
-                await self.connect()
-
+            await self._ensure_connected()
             await self.get_configuration()
 
     async def _ensure_alarms(self):
         if not self.alarms:
-            if not self.client or not self.client.is_connected:
-                await self.connect()
-
+            await self._ensure_connected()
             await self.get_alarms()
 
     async def _write_config(self, data: bytes):
