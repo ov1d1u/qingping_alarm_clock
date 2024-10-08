@@ -43,7 +43,6 @@ service: qingping_alarm_clock.set_time
 data:
   device_id: "your_device_id"
   time: "2022-02-22 13:30:00"
-  timezone: "Europe/Bucharest"
 ```
 
 ### `refresh`
