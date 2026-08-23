@@ -23,8 +23,9 @@ class QingpingConnectedBinarySensor(BinarySensorEntity):
     def __init__(self, instance: Qingping, config_entry: ConfigEntry):
         self._instance: Qingping = instance
         self._config_entry = config_entry
+        mac_unique = instance.mac.lower().replace(":", "")
         self._attr_name = f"{config_entry.data[CONF_NAME]} Connected"
-        self._attr_unique_id = f"{config_entry.data[CONF_NAME]}_is_connected"
+        self._attr_unique_id = f"{mac_unique}_is_connected"
         self._attr_device_class = "connectivity"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
         self._attr_is_on = None

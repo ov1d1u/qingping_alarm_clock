@@ -35,3 +35,13 @@ async def test_connected_binary_sensor_resyncs_on_configuration_update():
 
     assert sensor._attr_is_on is True
     assert sensor._attr_icon == "mdi:bluetooth-connect"
+
+
+@pytest.mark.asyncio
+async def test_connected_binary_sensor_unique_id_uses_mac_not_name():
+    instance = Qingping(hass=object(), mac="AA:BB:CC:DD:EE:FF", name="Clock Runtime Name")
+    config_entry = SimpleNamespace(data={"name": "Friendly Name"})
+
+    sensor = QingpingConnectedBinarySensor(instance, config_entry)
+
+    assert sensor._attr_unique_id == "aabbccddeeff_is_connected"
