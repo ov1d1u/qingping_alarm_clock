@@ -35,6 +35,7 @@ MAIN_CHAR       = "00000001-0000-1000-8000-00805f9b34fb"
 CFG_WRITE_CHAR  = "0000000B-0000-1000-8000-00805f9b34fb"
 CFG_READ_CHAR   = "0000000C-0000-1000-8000-00805f9b34fb"
 REQUIRED_CHARS = (MAIN_CHAR, CFG_WRITE_CHAR, CFG_READ_CHAR)
+EMPTY_ALARM_BYTES = bytes.fromhex("ffffffffff")
 
 AUTH_STEP_1 = bytes.fromhex("1101ea600e964287ea7d17894900da6174bd")
 AUTH_STEP_2 = bytes.fromhex("1102ea600e964287ea7d17894900da6174bd")
@@ -56,6 +57,19 @@ class Qingping:
         self._disconnect_task = None
         self._notify_started = False
         self._alarm_map: dict[int, Alarm] = {}
+
+    @staticmethod
+    def _empty_alarm(slot: int) -> Alarm:
+        return Alarm(slot, EMPTY_ALARM_BYTES)
+
+    def _finalize_alarms_from_map(self):
+        self.alarms = [
+            self._alarm_map.get(index, self._empty_alarm(index))
+            for index in range(ALARM_SLOTS_COUNT)
+        ]
+        if not self._alarms_event.is_set():
+            self._alarms_event.set()
+        self.eventbus.send(ALARMS_UPDATE, self.alarms)
 
     async def connect(self) -> bool:
         async with self._connect_lock:
@@ -100,7 +114,11 @@ class Qingping:
 
                 # Read alarms
                 _LOGGER.debug("Reading alarms...")
-                await self.get_alarms()
+                try:
+                    await self.get_alarms()
+                except Exception as e:
+                    # Alarm sync is best-effort during bootstrap; keep connection usable.
+                    _LOGGER.debug("Skipping alarm preload for %s: %s", self.mac, e)
             except Exception as e:
                 _LOGGER.debug("Failed to initialize %s after connection: %s", self.mac, e)
                 await self.disconnect()
@@ -390,10 +408,11 @@ class Qingping:
                         self._alarm_map[slot] = Alarm(slot, alarm_data)
 
                 expected_slots = set(range(ALARM_SLOTS_COUNT))
-                if not self._alarms_event.is_set() and expected_slots.issubset(self._alarm_map.keys()):
-                    self.alarms = [self._alarm_map[index] for index in range(ALARM_SLOTS_COUNT)]
-                    self._alarms_event.set()
-                    self.eventbus.send(ALARMS_UPDATE, self.alarms)
+                has_full_set = expected_slots.issubset(self._alarm_map.keys())
+                has_terminal_empty_chunk = all(alarm_data == EMPTY_ALARM_BYTES for _, alarm_data in alarm_chunks)
+
+                if has_full_set or has_terminal_empty_chunk:
+                    self._finalize_alarms_from_map()
             elif data.startswith(b"\x11\x06"):
                 _LOGGER.debug("Ignoring malformed alarms payload from %s: %s", self.mac, data.hex())
 
