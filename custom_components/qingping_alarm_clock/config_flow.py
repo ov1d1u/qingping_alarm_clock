@@ -44,10 +44,8 @@ class CleargrassConfigFlow(ConfigFlow, domain=DOMAIN):
         return False
 
     async def _validate_device(self, qingping):
-        assert await qingping.connect()
-        await qingping.disconnect()
-
-        return None
+        if not await qingping.connect():
+            raise HomeAssistantError("cannot_connect")
 
     async def async_step_user(
         self,
@@ -86,7 +84,7 @@ class CleargrassConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_manual_mac(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle manual mac step."""
         if user_input is not None:
             self.mac = user_input[CONF_MAC]
@@ -109,9 +107,10 @@ class CleargrassConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle validate step."""
         error = None
         qingping = Qingping(self.hass, self.mac, self.name)
-        await self._validate_device(qingping)
         try:
-            error = await self._validate_device(qingping)
+            await self._validate_device(qingping)
+        except HomeAssistantError as e:
+            error = str(e)
         except Exception as e:
             error = str(e)
         finally:

@@ -46,6 +46,9 @@ class QingpingSoundVolume(NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         await self._instance.set_sound_volume(int(value))
 
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
+
 
 class ScreenlightTime(NumberEntity):
     def __init__(self, instance, config_entry):
@@ -72,6 +75,9 @@ class ScreenlightTime(NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         await self._instance.set_screen_light_time(int(value))
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
 
 
 class DaytimeBrightness(NumberEntity):
@@ -100,6 +106,9 @@ class DaytimeBrightness(NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         await self._instance.set_daytime_brightness(int(value))
 
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
+
 
 class NighttimeBrightness(NumberEntity):
     def __init__(self, instance, config_entry):
@@ -126,3 +135,6 @@ class NighttimeBrightness(NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         await self._instance.set_nighttime_brightness(int(value))
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)

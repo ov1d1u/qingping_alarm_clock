@@ -39,6 +39,9 @@ class NighttimeStart(TimeEntity):
     async def async_set_value(self, value: time) -> None:
         await self._instance.set_nighttime_start_time(value)
 
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
+
 
 class NighttimeEnd(TimeEntity):
     def __init__(self, instance, config_entry):
@@ -60,3 +63,6 @@ class NighttimeEnd(TimeEntity):
 
     async def async_set_value(self, value: time) -> None:
         await self._instance.set_nighttime_end_time(value)
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)

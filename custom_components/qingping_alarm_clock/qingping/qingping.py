@@ -34,27 +34,28 @@ _LOGGER = logging.getLogger(__name__)
 MAIN_CHAR       = "00000001-0000-1000-8000-00805f9b34fb"
 CFG_WRITE_CHAR  = "0000000B-0000-1000-8000-00805f9b34fb"
 CFG_READ_CHAR   = "0000000C-0000-1000-8000-00805f9b34fb"
+REQUIRED_CHARS = (MAIN_CHAR, CFG_WRITE_CHAR, CFG_READ_CHAR)
 
 AUTH_STEP_1 = bytes.fromhex("1101ea600e964287ea7d17894900da6174bd")
 AUTH_STEP_2 = bytes.fromhex("1102ea600e964287ea7d17894900da6174bd")
 
 
 class Qingping:
-    client = None
-    configuration = None
-    alarms: list[Alarm] = []
-    eventbus = EventBus()
-
-    _connect_lock = asyncio.Lock()
-    _configuration_event = asyncio.Event()
-    _alarms_event = asyncio.Event()
-    _disconnect_task = None
-
     def __init__(self, hass: HomeAssistant, mac: str, name: str):
         """Initialize the Qingping CGD1 Alarm Clock."""
         self.hass = hass
         self.mac = mac
         self.name = name
+        self.client = None
+        self.configuration = None
+        self.alarms: list[Alarm] = []
+        self.eventbus = EventBus()
+        self._connect_lock = asyncio.Lock()
+        self._configuration_event = asyncio.Event()
+        self._alarms_event = asyncio.Event()
+        self._disconnect_task = None
+        self._notify_started = False
+        self._alarm_map: dict[int, Alarm] = {}
 
     async def connect(self) -> bool:
         async with self._connect_lock:
@@ -78,26 +79,34 @@ class Qingping:
                 _LOGGER.debug(f"Failed to connect to {self.mac}: {e}")
                 return False
 
-            await asyncio.sleep(2.0)  # give some time for service discovery
+            try:
+                await self._ensure_required_characteristics()
 
-            _LOGGER.debug(f"Connected to {self.mac}, authenticating...")
+                _LOGGER.debug(f"Connected to {self.mac}, authenticating...")
 
-            # Step 1 auth
-            await self._write_gatt_char(MAIN_CHAR, AUTH_STEP_1)
+                if not self._notify_started:
+                    await self.client.start_notify(CFG_READ_CHAR, self._notification_handler)
+                    self._notify_started = True
 
-            # Step 2 auth
-            await self._write_gatt_char(MAIN_CHAR, AUTH_STEP_2)
+                # Step 1 auth
+                await self._write_gatt_char(MAIN_CHAR, AUTH_STEP_1)
+
+                # Step 2 auth
+                await self._write_gatt_char(MAIN_CHAR, AUTH_STEP_2)
+
+                # Read configuration
+                _LOGGER.debug("Reading configuration...")
+                await self.get_configuration()
+
+                # Read alarms
+                _LOGGER.debug("Reading alarms...")
+                await self.get_alarms()
+            except Exception as e:
+                _LOGGER.debug("Failed to initialize %s after connection: %s", self.mac, e)
+                await self.disconnect()
+                return False
 
             self.eventbus.send(DEVICE_CONNECT, self)
-
-            # Read configuration
-            _LOGGER.debug("Reading configuration...")
-            await self.client.start_notify(CFG_READ_CHAR, self._notification_handler)
-            await self.get_configuration()
-
-            # Read alarms
-            _LOGGER.debug("Reading alarms...")
-            await self.get_alarms()
 
             return True
 
@@ -110,13 +119,20 @@ class Qingping:
     async def disconnect(self) -> bool:
         if self.client and self.client.is_connected:
             _LOGGER.debug(f"Disconnecting from {self.mac}...")
+            if self._notify_started:
+                try:
+                    await self.client.stop_notify(CFG_READ_CHAR)
+                except Exception:
+                    _LOGGER.debug("Failed to stop notifications for %s", self.mac)
+                finally:
+                    self._notify_started = False
             await self.client.disconnect()
             return True
 
         return False
 
     async def delayed_disconnect(self):
-        if not self.client.is_connected:
+        if not self.client or not self.client.is_connected:
             return
 
         try:
@@ -131,8 +147,9 @@ class Qingping:
 
     async def get_configuration(self):
         if self.client and self.client.is_connected:
+            self._configuration_event.clear()
             await self._write_config(b"\x01\x02")
-            await self._configuration_event.wait()
+            await asyncio.wait_for(self._configuration_event.wait(), timeout=CONNECTION_TIMEOUT)
         else:
             raise NotConnectedError("Not connected")
 
@@ -160,8 +177,10 @@ class Qingping:
 
     async def get_alarms(self):
         if self.client and self.client.is_connected:
+            self._alarm_map = {}
+            self._alarms_event.clear()
             await self._write_config(b"\x01\x06")
-            await self._alarms_event.wait()
+            await asyncio.wait_for(self._alarms_event.wait(), timeout=CONNECTION_TIMEOUT)
         else:
             raise NotConnectedError("Not connected")
 
@@ -313,6 +332,24 @@ class Qingping:
         else:
             raise NotConnectedError("Not connected")
 
+    async def _ensure_required_characteristics(self):
+        if not self.client or not self.client.is_connected:
+            raise NotConnectedError("Not connected")
+
+        services = self.client.services
+        if not services:
+            services = await self.client.get_services()
+
+        missing_chars = []
+        for characteristic_uuid in REQUIRED_CHARS:
+            if not services.get_characteristic(characteristic_uuid):
+                missing_chars.append(characteristic_uuid)
+
+        if missing_chars:
+            raise NotConnectedError(
+                f"Device {self.mac} is missing required characteristics: {', '.join(missing_chars)}"
+            )
+
     def _get_timestamp_bytes(self, timestamp: int):
         timestamp_bytes = [0] * 6
         timestamp_bytes[0] = 0x05
@@ -325,9 +362,13 @@ class Qingping:
         return bytes(timestamp_bytes)
 
     async def _notification_handler(self, sender, data):
-        if sender.uuid.lower() == CFG_READ_CHAR.lower():
+        sender_uuid = getattr(sender, "uuid", "")
+        if sender_uuid.lower() == CFG_READ_CHAR.lower():
             _LOGGER.debug(f"<< {sender.uuid}: {data.hex()}")
             if data.startswith(b"\x13\x02"):
+                if len(data) < 15:
+                    _LOGGER.debug("Ignoring malformed config payload from %s: %s", self.mac, data.hex())
+                    return
                 _LOGGER.debug(f"Got configuration bytes: {data.hex()}")
                 self.configuration = Configuration(data)
 
@@ -337,19 +378,30 @@ class Qingping:
                 _LOGGER.debug(f"Got alarms bytes: {data.hex()}")
                 slot_offset = data[2]
                 if slot_offset == 0:
-                    self.alarms = []
+                    self._alarm_map = {}
 
-                self.alarms.append(Alarm(slot_offset, data[3:8]))
-                self.alarms.append(Alarm(slot_offset + 1, data[8:13]))
-                self.alarms.append(Alarm(slot_offset + 2, data[13:18]))
+                alarm_chunks = (
+                    (slot_offset, data[3:8]),
+                    (slot_offset + 1, data[8:13]),
+                    (slot_offset + 2, data[13:18]),
+                )
+                for slot, alarm_data in alarm_chunks:
+                    if 0 <= slot < ALARM_SLOTS_COUNT:
+                        self._alarm_map[slot] = Alarm(slot, alarm_data)
 
-                self._alarms_event.set()
-                self.eventbus.send(ALARMS_UPDATE, self.alarms)
+                expected_slots = set(range(ALARM_SLOTS_COUNT))
+                if not self._alarms_event.is_set() and expected_slots.issubset(self._alarm_map.keys()):
+                    self.alarms = [self._alarm_map[index] for index in range(ALARM_SLOTS_COUNT)]
+                    self._alarms_event.set()
+                    self.eventbus.send(ALARMS_UPDATE, self.alarms)
+            elif data.startswith(b"\x11\x06"):
+                _LOGGER.debug("Ignoring malformed alarms payload from %s: %s", self.mac, data.hex())
 
     def _on_disconnect(self, client: BleakClient):
         if self._disconnect_task is not None:
             self._disconnect_task.cancel()
             self._disconnect_task = None
 
+        self._notify_started = False
         self.client = None
         self.eventbus.send(DEVICE_DISCONNECT, self)

@@ -11,6 +11,9 @@ class Language(Enum):
 
 class Configuration:
     def __init__(self, config_bytes):
+        if len(config_bytes) < 15:
+            raise ValueError("Configuration payload must be at least 15 bytes long.")
+
         self.date = datetime.now()
 
         self._sound_volume = config_bytes[2]
@@ -42,7 +45,7 @@ class Configuration:
     @sound_volume.setter
     def sound_volume(self, value):
         if value < 1 or value > 5:
-            return ValueError
+            raise ValueError("Sound volume must be between 1 and 5.")
         self._sound_volume = value
 
     @property
@@ -56,7 +59,7 @@ class Configuration:
     @timezone_offset.setter
     def timezone_offset(self, value):
         if value > 720 or value < -720:
-            return ValueError
+            raise ValueError("Timezone offset must be between -720 and 720 minutes.")
         self._timezone_offset = abs(value)
         self._tz_plus_flag = value >= 0
 
@@ -67,7 +70,7 @@ class Configuration:
     @screen_light_time.setter
     def screen_light_time(self, value):
         if value < 1 or value > 30:
-            return ValueError
+            raise ValueError("Screen light time must be between 1 and 30 seconds.")
         self._screen_light_time = value
 
     @property
@@ -77,7 +80,7 @@ class Configuration:
     @daytime_brightness.setter
     def daytime_brightness(self, value):
         if value < 1 or value > 100:
-            return ValueError
+            raise ValueError("Daytime brightness must be between 1 and 100.")
         self._daytime_brightness = value
 
     @property
@@ -87,7 +90,7 @@ class Configuration:
     @nighttime_brightness.setter
     def nighttime_brightness(self, value):
         if value < 1 or value > 100:
-            return ValueError
+            raise ValueError("Nighttime brightness must be between 1 and 100.")
         self._nighttime_brightness = value
 
     @property
@@ -97,7 +100,7 @@ class Configuration:
     @night_time_start_hour.setter
     def night_time_start_hour(self, value):
         if value < 0 or value > 23:
-            return ValueError
+            raise ValueError("Night start hour must be between 0 and 23.")
         self._night_time_start_hour = value
 
     @property
@@ -107,7 +110,7 @@ class Configuration:
     @night_time_start_minute.setter
     def night_time_start_minute(self, value):
         if value < 0 or value > 59:
-            return ValueError
+            raise ValueError("Night start minute must be between 0 and 59.")
         self._night_time_start_minute = value
 
     @property
@@ -117,7 +120,7 @@ class Configuration:
     @night_time_end_hour.setter
     def night_time_end_hour(self, value):
         if value < 0 or value > 23:
-            return ValueError
+            raise ValueError("Night end hour must be between 0 and 23.")
         self._night_time_end_hour = value
 
     @property
@@ -127,7 +130,7 @@ class Configuration:
     @night_time_end_minute.setter
     def night_time_end_minute(self, value):
         if value < 0 or value > 59:
-            return ValueError
+            raise ValueError("Night end minute must be between 0 and 59.")
         self._night_time_end_minute = value
 
     @property
@@ -221,11 +224,11 @@ class Configuration:
 
         byte_array.append(self.night_time_end_hour)
         byte_array.append(self.night_time_end_minute)
-        byte_array.append(b'\x01' if self._tz_plus_flag else b'\x00')
-        byte_array.append(b'\x01' if self._night_mode else b'\x00')
+        byte_array.append(0x01 if self._tz_plus_flag else 0x00)
+        byte_array.append(0x01 if self._night_mode else 0x00)
 
-        byte_array.append(b'\xff' * 5)
-        bytes_result = b''.join([bytes([x]) if isinstance(x, int) else x for x in byte_array])
+        byte_array.extend([0xff] * 5)
+        bytes_result = bytes(byte_array)
 
         if len(bytes_result) != 20:
             raise ValueError("Configuration bytes must be 20 bytes long.")
@@ -250,7 +253,4 @@ class Configuration:
         first_nibble = daytime_brightness // 10
         second_nibble = nighttime_brightness // 10
 
-        combined_byte_value = (first_nibble << 4) | second_nibble
-        combined_byte = combined_byte_value.to_bytes(1, byteorder='big')
-
-        return combined_byte
+        return (first_nibble << 4) | second_nibble

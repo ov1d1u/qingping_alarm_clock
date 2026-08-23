@@ -54,6 +54,10 @@ class LanguageSelect(SelectEntity):
 
     async def config_updated(self, config: Configuration):
         self._attr_current_option = config.language.value
+        self.schedule_update_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
 
 
 class TimeFormatSelect(SelectEntity):
@@ -79,6 +83,10 @@ class TimeFormatSelect(SelectEntity):
 
     async def config_updated(self, config: Configuration):
         self._attr_current_option = "24h" if config.use_24h_format else "12h"
+        self.schedule_update_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
 
 
 class TemperatureUnitSelect(SelectEntity):
@@ -105,3 +113,7 @@ class TemperatureUnitSelect(SelectEntity):
     async def config_updated(self, config: Configuration):
         self._attr_current_option = \
             TemperatureUnit.C.value if config.use_celsius else TemperatureUnit.F.value
+        self.schedule_update_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)

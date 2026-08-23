@@ -57,6 +57,10 @@ class QingpingAlarmsSwitch(SwitchEntity):
                 self._attr_extra_state_attributes[f"alarm_{alarm.slot}"] = alarm_dict
         self.schedule_update_ha_state()
 
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)
+        self._instance.eventbus.remove_listener(ALARMS_UPDATE, self.alarms_updated)
+
 
 class QingpingNightModeSwitch(SwitchEntity):
     def __init__(self, instance, config_entry):
@@ -83,3 +87,6 @@ class QingpingNightModeSwitch(SwitchEntity):
     async def config_updated(self, config: Configuration):
         self._attr_is_on = config.night_mode_enabled
         self.schedule_update_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.config_updated)

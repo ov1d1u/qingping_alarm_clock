@@ -45,3 +45,7 @@ class QingpingConnectedBinarySensor(BinarySensorEntity):
         self._attr_is_on = False
         self._attr_icon = "mdi:bluetooth-off"
         self.schedule_update_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        self._instance.eventbus.remove_listener(DEVICE_CONNECT, self.on_connect)
+        self._instance.eventbus.remove_listener(DEVICE_DISCONNECT, self.on_disconnect)
