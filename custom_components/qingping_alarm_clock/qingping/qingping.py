@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from bleak import BleakClient
+from bleak_retry_connector import establish_connection
 from datetime import time as dtime
 
 from homeassistant.core import HomeAssistant
@@ -19,7 +20,7 @@ from ..const import (
     ALARM_SLOTS_COUNT,
     DISCONNECT_DELAY,
     CONNECTION_TIMEOUT,
-    RETRY_INTERVAL
+    RETRY_INTERVAL,
 )
 from .events import (
     DEVICE_CONNECT,
@@ -65,11 +66,14 @@ class Qingping:
                 _LOGGER.error(f"No adapters can reach the device with address {self.mac}")
                 return False
 
-            self.client = BleakClient(device, disconnected_callback=self._on_disconnect)
-
             _LOGGER.debug(f"Connecting to {self.mac}...")
             try:
-                await self.client.connect()
+                self.client = await establish_connection(
+                    BleakClient,
+                    device,
+                    self.name,
+                    disconnected_callback=self._on_disconnect,
+                )
             except Exception as e:
                 _LOGGER.debug(f"Failed to connect to {self.mac}: {e}")
                 return False
