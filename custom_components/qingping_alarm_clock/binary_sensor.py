@@ -7,7 +7,8 @@ from homeassistant.helpers.entity import EntityCategory, DeviceInfo
 
 from .entity import async_device_device_info_fn
 from .qingping import Qingping
-from .qingping.events import DEVICE_DISCONNECT, DEVICE_CONNECT
+from .qingping.configuration import Configuration
+from .qingping.events import DEVICE_DISCONNECT, DEVICE_CONNECT, DEVICE_CONFIG_UPDATE
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     instance: Qingping = config_entry.runtime_data
@@ -26,26 +27,40 @@ class QingpingConnectedBinarySensor(BinarySensorEntity):
         self._attr_unique_id = f"{config_entry.data[CONF_NAME]}_is_connected"
         self._attr_device_class = "connectivity"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_is_on = False
+        self._attr_is_on = None
         self._attr_icon = "mdi:bluetooth-off"
+        self._sync_connection_state()
 
         instance.eventbus.add_listener(DEVICE_CONNECT, self.on_connect)
         instance.eventbus.add_listener(DEVICE_DISCONNECT, self.on_disconnect)
+        instance.eventbus.add_listener(DEVICE_CONFIG_UPDATE, self.on_configuration_update)
+
+    def _sync_connection_state(self):
+        is_connected = bool(self._instance.client and self._instance.client.is_connected)
+        self._attr_is_on = is_connected
+        self._attr_icon = "mdi:bluetooth-connect" if is_connected else "mdi:bluetooth-off"
+
+    async def async_added_to_hass(self) -> None:
+        self._sync_connection_state()
+        self.schedule_update_ha_state()
 
     @property
     def device_info(self) -> DeviceInfo:
         return async_device_device_info_fn(self._instance, self._config_entry.data[CONF_NAME])
 
     async def on_connect(self, instance: Qingping):
-        self._attr_is_on = True
-        self._attr_icon = "mdi:bluetooth-connect"
+        self._sync_connection_state()
         self.schedule_update_ha_state()
 
     async def on_disconnect(self, instance: Qingping):
-        self._attr_is_on = False
-        self._attr_icon = "mdi:bluetooth-off"
+        self._sync_connection_state()
+        self.schedule_update_ha_state()
+
+    async def on_configuration_update(self, config: Configuration):
+        self._sync_connection_state()
         self.schedule_update_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
         self._instance.eventbus.remove_listener(DEVICE_CONNECT, self.on_connect)
         self._instance.eventbus.remove_listener(DEVICE_DISCONNECT, self.on_disconnect)
+        self._instance.eventbus.remove_listener(DEVICE_CONFIG_UPDATE, self.on_configuration_update)
