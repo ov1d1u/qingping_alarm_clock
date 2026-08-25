@@ -84,6 +84,14 @@ set_time:
       required: true
       selector:
         datetime:
+sync_time:
+  description: "Sync the clock's time with the Home Assistant instance."
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: qingping_alarm_clock
 refresh:
   description: "Connect to the clock to refresh data."
   fields:

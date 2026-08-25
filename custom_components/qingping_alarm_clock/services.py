@@ -9,6 +9,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 from homeassistant.const import ATTR_DEVICE_ID
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.util import dt as dt_util
 
 from .qingping.util import alarm_days_from_string
 from .qingping import Qingping, Alarm
@@ -18,6 +19,7 @@ from .const import (
     SERVICE_DELETE_ALARM,
     SERVICE_GET_ALARMS,
     SERVICE_SET_TIME,
+    SERVICE_SYNC_TIME,
     SERVICE_REFRESH,
     CONF_TIME,
     ALARM_SLOTS_COUNT,
@@ -55,6 +57,10 @@ GET_ALARMS_SCHEMA = vol.Schema({
 SET_TIME_SCHEMA = vol.Schema({
     vol.Required(ATTR_DEVICE_ID): str,
     vol.Required(CONF_TIME): cv.datetime
+})
+
+SYNC_TIME_SCHEMA = vol.Schema({
+    vol.Required(ATTR_DEVICE_ID): str
 })
 
 REFRESH_SCHEMA = vol.Schema({
@@ -162,6 +168,20 @@ def async_register_services(hass: HomeAssistant) -> None:
 
         raise ServiceValidationError(f"Qingping device with MAC {mac} is not configured")
 
+    async def async_sync_time(call: ServiceCall) -> None:
+        """Sync the clock's time with the Home Assistant instance."""
+        mac = _get_device_mac(hass, call)
+
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            instance: Qingping = entry.runtime_data
+            if instance.mac != mac:
+                continue
+
+            dt = dt_util.now()
+            timezone_offset = int(dt.utcoffset().total_seconds() / 60)
+            timestamp = int(dt.timestamp())
+            await instance.set_time(timestamp, timezone_offset)
+
     async def async_refresh(call: ServiceCall) -> None:
         """Connect to the clock to refresh data"""
         mac = _get_device_mac(hass, call)
@@ -220,6 +240,13 @@ def async_register_services(hass: HomeAssistant) -> None:
         SERVICE_SET_TIME,
         async_set_time,
         schema=SET_TIME_SCHEMA
+    )
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SYNC_TIME,
+        async_sync_time,
+        schema=SYNC_TIME_SCHEMA
     )
 
     hass.services.async_register(

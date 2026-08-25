@@ -45,6 +45,15 @@ data:
   time: "2022-02-22 13:30:00"
 ```
 
+### `sync_time`
+Sync the clock's time with the Home Assistant instance.
+
+```yaml
+service: qingping_alarm_clock.sync_time
+data:
+  device_id: "your_device_id"
+```
+
 ### `refresh`
 Refresh the clock data.
 

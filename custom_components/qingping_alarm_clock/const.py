@@ -13,6 +13,7 @@ SERVICE_SET_ALARM = "set_alarm"
 SERVICE_DELETE_ALARM = "delete_alarm"
 SERVICE_GET_ALARMS = "get_alarms"
 SERVICE_SET_TIME = "set_time"
+SERVICE_SYNC_TIME = "sync_time"
 SERVICE_REFRESH = "refresh"
 
 DISCONNECT_DELAY = 30
