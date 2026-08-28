@@ -48,6 +48,7 @@ class Qingping:
         self.mac = mac
         self.name = name
         self.client = None
+        self._connected = False
         self.configuration = None
         self.alarms: list[Alarm] = []
         self.eventbus = EventBus()
@@ -71,9 +72,21 @@ class Qingping:
             self._alarms_event.set()
         self.eventbus.send(ALARMS_UPDATE, self.alarms)
 
+    @property
+    def connected(self) -> bool:
+        """Authoritative connection state, driven by connect success / disconnect callback."""
+        return self._connected
+
+    def _set_connected(self, value: bool):
+        if self._connected == value:
+            return
+        self._connected = value
+        self.eventbus.send(DEVICE_CONNECT if value else DEVICE_DISCONNECT, self)
+
     async def connect(self) -> bool:
         async with self._connect_lock:
             if self.client and self.client.is_connected:
+                self._set_connected(True)
                 return True
 
             device = async_ble_device_from_address(self.hass, self.mac, connectable=True)
@@ -124,7 +137,7 @@ class Qingping:
                 await self.disconnect()
                 return False
 
-            self.eventbus.send(DEVICE_CONNECT, self)
+            self._set_connected(True)
 
             return True
 
@@ -206,7 +219,7 @@ class Qingping:
         self,
         slot: int,
         is_enabled: bool | None,
-        time: dtime | None,
+        atime: dtime | None,
         days: set[AlarmDay] | None,
         snooze: bool | None
     ) -> bool:
@@ -217,8 +230,8 @@ class Qingping:
             alarm: Alarm = self.alarms[slot]
             if is_enabled is not None:
                 alarm.is_enabled = is_enabled
-            if time is not None:
-                alarm.time = time
+            if atime is not None:
+                alarm.time = atime
             if days is not None:
                 alarm.days = days
             if snooze is not None:
@@ -423,4 +436,4 @@ class Qingping:
 
         self._notify_started = False
         self.client = None
-        self.eventbus.send(DEVICE_DISCONNECT, self)
+        self._set_connected(False)

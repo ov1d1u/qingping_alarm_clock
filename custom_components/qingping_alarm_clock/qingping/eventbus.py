@@ -6,6 +6,7 @@ _LOGGER = logging.getLogger(__name__)
 class EventBus:
   def __init__(self):
     self.listeners = {}
+    self._tasks = set()
 
   def add_listener(self, event_name, listener):
     if not self.listeners.get(event_name, None):
@@ -23,14 +24,20 @@ class EventBus:
       del self.listeners[event_name]
 
   def send(self, event_name, event_data=None):
-    listeners = self.listeners.get(event_name, [])
-    for listener in listeners:
+    # Iterate a copy so a listener can (un)subscribe while being notified.
+    for listener in list(self.listeners.get(event_name, ())):
       task = asyncio.create_task(listener(event_data))
-      task.add_done_callback(self._log_listener_exception)
+      # Keep a strong reference until the task is done; the event loop only
+      # holds a weak one, so an unreferenced task can be garbage collected
+      # mid-execution.
+      self._tasks.add(task)
+      task.add_done_callback(self._on_task_done)
 
-  @staticmethod
-  def _log_listener_exception(task: asyncio.Task):
+  def _on_task_done(self, task: asyncio.Task):
+    self._tasks.discard(task)
     try:
       task.result()
+    except asyncio.CancelledError:
+      pass
     except Exception as ex:
       _LOGGER.exception("Event listener task failed: %s", ex)

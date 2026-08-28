@@ -9,7 +9,10 @@ from custom_components.qingping_alarm_clock.qingping.qingping import (
     CFG_READ_CHAR,
     Qingping,
 )
-from custom_components.qingping_alarm_clock.qingping.events import DEVICE_CONNECT
+from custom_components.qingping_alarm_clock.qingping.events import (
+    DEVICE_CONNECT,
+    DEVICE_DISCONNECT,
+)
 
 
 class _FakeServices:
@@ -183,6 +186,62 @@ async def test_connect_succeeds_when_alarm_preload_fails(monkeypatch, qingping_i
     assert fake_client.disconnected is False
     assert len(fake_client.notify_calls) == 1
     assert len(connected_events) == 1
+
+
+@pytest.mark.asyncio
+async def test_connected_state_tracks_connect_shortcut_and_disconnect(qingping_instance):
+    events = []
+
+    async def on_connect(instance):
+        events.append(DEVICE_CONNECT)
+
+    async def on_disconnect(instance):
+        events.append(DEVICE_DISCONNECT)
+
+    qingping_instance.eventbus.add_listener(DEVICE_CONNECT, on_connect)
+    qingping_instance.eventbus.add_listener(DEVICE_DISCONNECT, on_disconnect)
+
+    # Already-connected shortcut path still announces the connection once.
+    qingping_instance.client = SimpleNamespace(is_connected=True)
+    assert await qingping_instance.connect() is True
+    await asyncio.sleep(0)
+    assert qingping_instance.connected is True
+    assert events == [DEVICE_CONNECT]
+
+    # A second call while still connected must not re-announce.
+    assert await qingping_instance.connect() is True
+    await asyncio.sleep(0)
+    assert events == [DEVICE_CONNECT]
+
+    # The Bleak disconnect callback flips state and announces exactly once.
+    qingping_instance._on_disconnect(qingping_instance.client)
+    await asyncio.sleep(0)
+    assert qingping_instance.connected is False
+    assert qingping_instance.client is None
+    assert events == [DEVICE_CONNECT, DEVICE_DISCONNECT]
+
+
+@pytest.mark.asyncio
+async def test_failed_connect_does_not_emit_phantom_disconnect(monkeypatch, qingping_instance):
+    events = []
+
+    async def on_disconnect(instance):
+        events.append(DEVICE_DISCONNECT)
+
+    qingping_instance.eventbus.add_listener(DEVICE_DISCONNECT, on_disconnect)
+
+    import custom_components.qingping_alarm_clock.qingping.qingping as qingping_module
+
+    async def fail_establish(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(qingping_module, "async_ble_device_from_address", lambda *a, **k: object())
+    monkeypatch.setattr(qingping_module, "establish_connection", fail_establish)
+
+    assert await qingping_instance.connect() is False
+    await asyncio.sleep(0)
+    assert qingping_instance.connected is False
+    assert events == []
 
 
 @pytest.mark.asyncio

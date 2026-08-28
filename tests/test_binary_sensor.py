@@ -4,37 +4,46 @@ import pytest
 
 from custom_components.qingping_alarm_clock.binary_sensor import QingpingConnectedBinarySensor
 from custom_components.qingping_alarm_clock.qingping import Qingping
-from custom_components.qingping_alarm_clock.qingping.configuration import Configuration
+
+
+def _make_sensor(connected=False):
+    instance = Qingping(hass=object(), mac="AA:BB:CC:DD:EE:FF", name="Test Clock")
+    instance._connected = connected
+    config_entry = SimpleNamespace(data={"name": "My Clock"})
+    return instance, QingpingConnectedBinarySensor(instance, config_entry)
 
 
 @pytest.mark.asyncio
 async def test_connected_binary_sensor_syncs_initial_connected_state():
-    instance = Qingping(hass=object(), mac="AA:BB:CC:DD:EE:FF", name="Test Clock")
-    instance.client = SimpleNamespace(is_connected=True)
-
-    config_entry = SimpleNamespace(data={"name": "My Clock"})
-    sensor = QingpingConnectedBinarySensor(instance, config_entry)
+    _, sensor = _make_sensor(connected=True)
 
     assert sensor._attr_is_on is True
     assert sensor._attr_icon == "mdi:bluetooth-connect"
 
 
 @pytest.mark.asyncio
-async def test_connected_binary_sensor_resyncs_on_configuration_update():
-    instance = Qingping(hass=object(), mac="AA:BB:CC:DD:EE:FF", name="Test Clock")
-    instance.client = SimpleNamespace(is_connected=False)
-
-    config_entry = SimpleNamespace(data={"name": "My Clock"})
-    sensor = QingpingConnectedBinarySensor(instance, config_entry)
-
+async def test_connected_binary_sensor_follows_connect_and_disconnect_events():
+    instance, sensor = _make_sensor(connected=False)
     assert sensor._attr_is_on is False
 
-    instance.client = SimpleNamespace(is_connected=True)
-    config = Configuration(bytes([0x13, 0x02, 3, 0xFF, 0xFF, 0, 0, 1, 0x11, 21, 0, 6, 0, 1, 0]))
-    await sensor.on_configuration_update(config)
-
+    await sensor.on_connect(instance)
     assert sensor._attr_is_on is True
     assert sensor._attr_icon == "mdi:bluetooth-connect"
+
+    await sensor.on_disconnect(instance)
+    assert sensor._attr_is_on is False
+    assert sensor._attr_icon == "mdi:bluetooth-off"
+
+
+@pytest.mark.asyncio
+async def test_connected_binary_sensor_trusts_connect_event_over_stale_client():
+    # Regression: client.is_connected can momentarily report False right after a
+    # connection is established. The connect event must still turn the sensor on.
+    instance, sensor = _make_sensor(connected=False)
+    instance.client = None
+
+    await sensor.on_connect(instance)
+    assert sensor._attr_is_on is True
 
 
 @pytest.mark.asyncio
