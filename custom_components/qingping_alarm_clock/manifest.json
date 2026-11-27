@@ -10,8 +10,8 @@
     "bluetooth_adapters"
   ],
   "documentation": "https://github.com/ov1d1u/qingping_alarm_clock",
-  "issue_tracker": "https://github.com/ov1d1u/qingping_alarm_clock/issues",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/ov1d1u/qingping_alarm_clock/issues",
   "requirements": [
     "bleak>=0.17.0",
     "bleak-retry-connector>=3.5.0"
